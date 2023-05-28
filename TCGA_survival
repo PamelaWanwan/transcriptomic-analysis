@@ -1,5 +1,5 @@
 # script to run survival analysis using TCGA data 
-setwd("/Users/wanzhihan/Desktop/R语言/06_TCGA下载分析视频/TCGA survival analysis")
+# setwd()
 
 #loading packages
 library(TCGAbiolinks)
