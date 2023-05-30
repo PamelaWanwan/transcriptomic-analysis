@@ -1,7 +1,7 @@
 # script to run survival analysis using TCGA data 
 # setwd()
 
-#loading packages
+#load packages------
 library(TCGAbiolinks)
 library(survminer)
 library(survival)
@@ -9,19 +9,17 @@ library(SummarizedExperiment)
 library(tidyverse)
 library(DESeq2)
 
-# getting clinical data from TCGA------
+# get clinical data from TCGA------
 clinical_stad <- GDCquery_clinic("TCGA-STAD")
-help('any')
-# 是否有这些信息
+# check out if those key informations are available
 any(colnames(clinical_stad)%in%c("vital_status","days_to_last_follow_up","days_to_death"))
-# 这些信息在第几列
+# which column
 which(colnames(clinical_stad)%in%c("vital_status","days_to_last_follow_up","days_to_death"))
-# 快速查看对应的列
+# take a quick look
 clinical_stad[,c(9,38,44)]
-# 查看生存和死亡对应的人数
 table(clinical_stad$vital_status)
 
-# 去除not reported
+# delete not reported data------
 which(clinical_stad$vital_status == "Not Reported")
 clinical_stad[319,]$days_to_last_follow_up
 clinical_stad2<- clinical_stad[-319,]
@@ -30,23 +28,21 @@ table(clinical_stad2$vital_status)
 # days_to_death, that is the number of days passed from the initial diagnosis to the patients death
 # days_to_last_follow_up, that is the number of days passed from the initial diagnosis to the last visit
 
-#change certain values the way they are encoded
+# change certain values the way they are encoded------
 clinical_stad2$deceased <- ifelse(clinical_stad2$vital_status == "Alive", FALSE, TRUE)
- #assign false value to all the patients that are yet alive 
- #this new column will be using in the following survival analysis
+#assign false value to all the patients that are yet alive 
+#this new column will be using in the following survival analysis
 # have a quick check
 table(clinical_stad2$deceased)
 
-# create an "overall survival" variable that is equal to days_to_death
-# for dead patients, and to days_to_last_follow_up for patients who 
-# are still alive
+# create an "overall survival" variable that is equal to days_to_death------
+# for dead patients, and to days_to_last_follow_up for patients who are still alive
 clinical_stad2$overall_survival <- ifelse(clinical_stad2$vital_status == "Alive",
                                           clinical_stad2$days_to_last_follow_up,
                                           clinical_stad2$days_to_death)
 
-# get gene expression data------
-
-# build a query to get gene expression data from entire cohort
+# get the gene expression data------
+# build a query to get gene expression data from TCGA
 query_stad_all <- GDCquery(project = "TCGA-STAD",
                            data.category = "Transcriptome Profiling",
                            experimental.strategy = "RNA-Seq",
@@ -57,7 +53,7 @@ query_stad_all <- GDCquery(project = "TCGA-STAD",
 
 output_stad <- getResults(query_stad_all)
 
-# 先少下几个数据试一下
+# we can have a try using 20 samples------
 # get 20 primary tissue sample barcodes
 tumor <- output_stad[output_stad$sample_type == "Primary Tumor","cases"][1:20]
 tumor
@@ -86,7 +82,7 @@ coldata <- as.data.frame(colData(tcga_stad_data))
 # vst transform counts to be used in survival analysis------
 dds <- DESeqDataSetFromMatrix(countData = stad_matrix,
                               colData = coldata,
-                              design = ~ 1)#no specific design
+                              design = ~ 1)# there is no specific design
 
 # removing genes with sum total of 10 reads across all samples
 keep <- rowSums(counts(dds))>=10
