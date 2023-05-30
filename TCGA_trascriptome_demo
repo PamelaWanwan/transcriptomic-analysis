@@ -1,5 +1,7 @@
-#setwd()
-#loading packages
+# script to run differential expression gene analysis using TCGA data
+
+# setwd()
+# load packages------
 library(TCGAbiolinks)
 library(survminer)
 library(survival)
@@ -7,24 +9,24 @@ library(SummarizedExperiment)
 library(tidyverse)
 library(DESeq2)
 
-# build a query to get gene expression data from entire cohort------
+# build a query to get gene expression data from TCGA------
 query_stad <- GDCquery(project = "TCGA-STAD",
                        data.category = "Transcriptome Profiling",
                        experimental.strategy = "RNA-Seq",
                        workflow.type = "STAR - Counts",
                        data.type = "Gene Expression Quantification",
                        access = "open")
+output_stad <- getResults(query_stad_all)
+GDCdownload(query_stad)
 
-#output_stad <- getResults(query_stad_all)
-#GDCdownload(query_stad)
-
-# get fpkm
+# get counts
 tcga_stad_data <- GDCprepare(query_stad,summarizedExperiment = TRUE)
 stad_all <- assay(tcga_stad_data, "unstranded")
 stad_all[1:10,1:10]
 
-saveRDS(stad_all, "stad_all_counts.RData")
-# readRDS("stad_all_counts.RData")
+saveRDS(stad_all, "stad_counts.RData")
+
+#readRDS("stad_all_counts.RData")
 
 
 # build DESeqDataSet------
@@ -65,10 +67,10 @@ summary(res)
 # summary(res0.01)
 
 # save results
-resOrdered <- res[order(res$pvalue),]##从小到大排序，默认decreasing = F 
+resOrdered <- res[order(res$pvalue),]
 head(resOrdered)
-sum(res$padj < 0.1, na.rm=TRUE)  #有多少padj小于0.1的 
-sum(res$padj < 0.001, na.rm=TRUE)  #有多少padj小于0.001的 
+sum(res$padj < 0.1, na.rm=TRUE)  
+sum(res$padj < 0.001, na.rm=TRUE)  
 
 resSig <- subset(resOrdered, padj < 0.001)
 head(resSig)
@@ -99,27 +101,25 @@ rt$gene_symbol<- mapIds(org.Hs.eg.db,
                         column = 'SYMBOL')
 colnames(rt) <- c("ensembl_id","ensembl","gene_symbol")
 degs <- merge(degs,rt,by="ensembl_id",all.x=T)
-#缺失值
+# delete NA
 table(is.na(degs$gene_symbol))
 newdegs<-degs[complete.cases(degs$gene_symbol),]
-#重复值
+# remove duplicates
 table(newdegs$gene_symbol) > 1
 which(duplicated(newdegs$gene_symbol))
 degs.2 <- newdegs[!duplicated(newdegs$gene_symbol),]
-table(table(degs.2$gene_symbol) > 1)#已去重
+table(table(degs.2$gene_symbol) > 1)
 
 saveRDS(degs.2,"degs_nodups_noNA.RData")
 
-#行名
 rownames(degs.2) <- degs.2$gene_symbol
-#删除多余列整理成表达矩阵
 degs.2 <- degs.2[,-c(1,8,9)]
 
 # order by log2FC
 degs.2orderd <- degs.2[order(degs.2$log2FoldChange,decreasing = TRUE),]
-table(degs.2orderd$log2FoldChange > 2)#1078个上调大于2的基因;
-table(abs(degs.2orderd$log2FoldChange) >2)# 2145-1078=1067个下调大于2的基因
-2145-1078
+table(degs.2orderd$log2FoldChange > 2)#1078 uploaded genes
+table(abs(degs.2orderd$log2FoldChange) >2)# 1067 downloaded genes
+
 
 # DEG visulization------
 
