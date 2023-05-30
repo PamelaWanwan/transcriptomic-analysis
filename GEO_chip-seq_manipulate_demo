@@ -15,15 +15,16 @@ library(ggplot2) # for DEGs visulization volcano plot
 library(pheatmap) # for DEGs visulization  heatmap
 
 # read in matrix data------
-#options('download.file.method.GEOquery'='auto')
-#options('GEOquery.inmemory.gpl'=FALSE)
-#options('download.file.method.GEOquery' = 'libcurl')
-#gset <- getGEO("GSE39582", destdir = "02_data input/", AnnotGPL = F, getGPL = F)#不下载平台注释文件
-gset <- getGEO("GSE39582", destdir = "02_data input/") #这样下载的是表达矩阵不是raw data
+# options('download.file.method.GEOquery'='auto')
+# options('GEOquery.inmemory.gpl'=FALSE)
+# options('download.file.method.GEOquery' = 'libcurl')
+# gset <- getGEO("GSE39582", destdir = "02_data input/", AnnotGPL = F, getGPL = F)
+
+gset <- getGEO("GSE39582", destdir = "02_data input/") 
 
 
 # get expression and clinical information------
-#get phenoData information
+# get phenoData information
 pdata <- pData(gset[[1]])
 table(pdata$source_name_ch1)
 
@@ -32,7 +33,6 @@ group_list <- ifelse(str_detect(pdata$source_name_ch1, "Adenocarcinoma"), "tumor
                      "normal")
 # set reference level
 group_list <-  factor(group_list, levels = c("normal","tumor"))
-help("factor")
 table(group_list)
 
 # get expression matrix from gset and perform normalization------
@@ -42,8 +42,7 @@ boxplot(exp, outline = FALSE, notch = T, col = group_list, las = 2)
 # normalization
 exp <- normalizeBetweenArrays(exp)
 boxplot(exp, outline = FALSE, notch = T, col = group_list, las = 2)
-range(exp)#minimum and maximum, 范围在20以内的表达值基本经过了log对数转换
-help("range")
+range(exp)#minimum and maximum, Logarithmic conversion has been performed
 
 # switch probes to gene symbols------
 # check the platform information
@@ -111,16 +110,16 @@ colnames(deg)
 
 logFC <- 1.5
 P.Value <- 0.05
-type1 <- (deg$P.Value < P.Value)&(deg$logFC < -logFC)#down regulated
-type2 <- (deg$P.Value < P.Value)&(deg$logFC > logFC)#up regulated
+type1 <- (deg$P.Value < P.Value)&(deg$logFC < -logFC)# down regulated
+type2 <- (deg$P.Value < P.Value)&(deg$logFC > logFC)# up regulated
 
 deg$change <- ifelse(type1, "down", ifelse(type2, "up", "stable")) # divide into up down stable three groups
 
 table(deg$change)
 
 # DEGs visulization volcano plot------
- # volcano plot based on ggpubr
-deg$logP <- -log10(deg$P.Value)# 对p值取10的负对数
+# volcano plot based on ggpubr
+deg$logP <- -log10(deg$P.Value)
 ggscatter(deg, x = "logFC", y = "logP",
           color = "change",
           palette = c("blue","black","red"),
@@ -130,7 +129,7 @@ ggscatter(deg, x = "logFC", y = "logP",
   geom_vline(xintercept = c(-logFC, logFC), linetype = "dashed")
 
 # add details to top 5 regulated gene
-deg$Label = "" #新加一列label
+deg$Label = "" #add a new column of label
 deg <- deg[order(deg$logFC),]
 
 head(deg)
@@ -164,7 +163,7 @@ ggscatter(deg, x = "logFC", y = "logP",
   geom_hline(yintercept = -log10(P.Value), linetype = "dashed") + 
   geom_vline(xintercept = c(-logFC, logFC), linetype = "dashed")
 
- # volcano plot based on ggplot2
+# volcano plot based on ggplot2
 p <- ggplot(data = deg,
             aes(x = logFC,
                 y = -log10(P.Value))) + 
@@ -176,7 +175,7 @@ p <- ggplot(data = deg,
   geom_hline(yintercept = -log10(P.Value), lty = 4, col = "black", lwd = 0.8) + 
   theme_bw()
 p
- # also add top gene labels
+# also add top gene labels
 x1 <- deg %>%
   filter(change == "up") %>%
   tail(5)
@@ -211,4 +210,4 @@ pheatmap(diff,
          fontsize_col = 3,
          fontsize_row = 3)
 
-# The dowstream procedure including VENN GO KEGG GSEA PPI WGCNA etc
+# The dowstream procedure including VENN GO KEGG GSEA PPI WGCNA etc.
