@@ -1,0 +1,328 @@
+library(Seurat)
+library(dplyr)
+
+# 定义存放文件的目录
+working_dir <- "GSE148071_RAW_1" # 我的文件夹路径
+
+# 获取所有 .txt 文件路径
+txt_files <- list.files(working_dir, pattern = "\\.txt$", full.names = TRUE)
+
+#检查
+print(txt_files)
+
+# 批量读取文件并创建 Seurat 对象
+seurat_list_1 <- list()
+
+for (file in txt_files) {
+  # 读取表达矩阵
+  expr_matrix <- read.table(file, header = TRUE, row.names = 1, sep = "\t", check.names = FALSE)
+  
+  # 创建 Seurat 对象
+  seurat_obj <- CreateSeuratObject(counts = expr_matrix)
+  
+  # 提取文件名作为样本名称
+  sample_name <- tools::file_path_sans_ext(basename(file))
+  seurat_obj$sample <- sample_name  # 为每个 Seurat 对象添加样本标注
+  
+  # 保存到列表
+  seurat_list_1[[sample_name]] <- seurat_obj
+}
+
+# 查看每个 Seurat 对象的信息
+seurat_list_1
+combined_seurat_1 <- merge(seurat_list_1[[1]], y = seurat_list_1[-1], add.cell.ids = names(seurat_list_1), project = "Combined_Single_Cell_1")
+save(combined_seurat_1, file = "Combined_Single_Cell_seuratobj_1.Rdata")
+
+gc()
+rm(list=ls())
+
+load("Combined_Single_Cell_seuratobj_1.Rdata")
+
+#质控
+combined_seurat_1[["percent.mt"]] <- PercentageFeatureSet(combined_seurat_1, pattern = "^MT-")
+
+combined_seurat_1 <- subset(combined_seurat_1, 
+                          subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & nCount_RNA < 30000 & percent.mt < 30)
+#检查质控结果
+combined_seurat_1
+summary(combined_seurat_1[["nCount_RNA"]])  # 检查 UMI 分布
+summary(combined_seurat_1[["nFeature_RNA"]]) #检查基因数目
+summary(combined_seurat_1[["orig.ident"]]) #检查细胞数目
+gc()
+
+#标准化
+combined_seurat_1 <- NormalizeData(combined_seurat_1, normalization.method = "LogNormalize", scale.factor = 10000)
+gc()
+
+#寻找高变基因
+combined_seurat_1 <- FindVariableFeatures(combined_seurat_1, selection.method = "vst", nfeatures = 600)
+gc()
+
+
+#Scaling the data
+all.genes <- rownames(combined_seurat_1)
+combined_seurat_1 <- ScaleData(combined_seurat_1, features = all.genes)
+gc()
+
+#降维
+combined_seurat_1 <- RunPCA(combined_seurat_1, features = VariableFeatures(object = combined_seurat_1))
+gc()
+
+library(harmony)
+#去批次效应
+combined_seurat_1 <- IntegrateLayers(object = combined_seurat_1, method = HarmonyIntegration, orig.reduction = "pca", new.reduction = "integrated.harmony", dims = 1:15)
+gc()
+
+# re-join layers after integration
+combined_seurat_1[["RNA"]] <- JoinLayers(combined_seurat_1[["RNA"]])
+gc()
+
+#聚类
+combined_seurat_1 <- FindNeighbors(combined_seurat_1, reduction = "integrated.harmony", dims = 1:15)
+combined_seurat_1 <- FindClusters(combined_seurat_1, resolution = 0.6)
+gc()
+
+#UMAP及可视化
+combined_seurat_1 <- RunUMAP(combined_seurat_1, dims = 1:15, reduction = "integrated.harmony")
+gc()
+
+# Visualization
+# 自定义颜色
+# 查看实际的聚类标签
+table(combined_seurat_1$seurat_clusters)
+
+# 根据实际标签更新颜色映射
+library(RColorBrewer)
+
+# 使用colorRampPalette生成18种颜色
+my_colors <- colorRampPalette(brewer.pal(9, "Set1"))(18)
+
+# 绘制 UMAP 并使用自动生成的颜色
+DimPlot(combined_seurat_1, reduction = "umap", group.by = "seurat_clusters", cols = my_colors, label = TRUE)
+
+saveRDS(combined_seurat_1, file = "obj1.rds")
+
+library(Seurat)
+library(dplyr)
+gc()
+load("")
+
+#查看Seurat分析对象
+obj
+
+# 查看基因的名称
+head(rownames(obj))
+
+# 查看细胞的名称（样本名）
+head(colnames(obj))
+
+# 查看聚类结果
+head(obj@meta.data$seurat_clusters)
+
+# 查看PCA的坐标
+head(obj@reductions$pca@cell.embeddings)
+
+# 查看UMAP的坐标
+head(obj@reductions$umap@cell.embeddings)
+
+# 查看 counts 矩阵的行名和列名
+head(rownames(obj@assays$RNA@layers[["counts"]]))  # 基因名
+head(colnames(obj@assays$RNA@layers[["counts"]]))  # 细胞名
+
+# 查看 scale.data 矩阵的行名和列名
+head(rownames(obj@assays$RNA@layers[["scale.data"]]))  # 基因名
+head(colnames(obj@assays$RNA@layers[["scale.data"]]))  # 细胞名
+
+# 查看 counts 矩阵的行名和列名
+head(rownames(obj@assays$RNA@layers[["data"]]))  # 基因名
+head(colnames(obj@assays$RNA@layers[["data"]]))  # 细胞名
+
+# 查看 counts 或 scale.data 的维度
+dim(obj@assays$RNA@layers[["counts"]])
+dim(obj@assays$RNA@layers[["scale.data"]])
+
+#设置行名和列名
+# 获取基因名和细胞名
+gene_names <- rownames(obj)  # 基因名称
+cell_names <- colnames(obj)  # 细胞名称
+gc()
+
+# 设置 counts，data，scale.data 矩阵的行名和列名
+rownames(obj@assays$RNA@layers[["counts"]]) <- gene_names
+colnames(obj@assays$RNA@layers[["counts"]]) <- cell_names
+rownames(obj@assays$RNA@layers[["scale.data"]]) <- gene_names
+colnames(obj@assays$RNA@layers[["scale.data"]]) <- cell_names
+rownames(obj@assays$RNA@layers[["data"]]) <- gene_names
+colnames(obj@assays$RNA@layers[["data"]]) <- cell_names
+gc()
+
+# 校验
+identical(rownames(obj@assays$RNA@layers[["data"]]), gene_names)  # 基因名
+identical(colnames(obj@assays$RNA@layers[["data"]]), cell_names)  # 细胞名
+
+saveRDS(obj, file = "obj1.rds")
+gc()
+
+load("obj1.rds")
+#手动定义 marker_genes
+Myeloid_cells_marker_genes <- c("CD14", "LYZ","CD68")
+Cancer_cells_marker_genes <- c("EPCAM")
+Epithelial_cells_marker_genes <- c("CAPS", "SNTN")
+
+# 检查 marker_genes 是否在 scale.data 中存在
+Myeloid_cells_marker_genes <- Myeloid_cells_marker_genes %in% rownames(obj@assays$RNA@layers[["scale.data"]])
+Myeloid_cells_marker_genes
+
+Cancer_cells_marker_genes <- Cancer_cells_marker_genes %in% rownames(obj@assays$RNA@layers[["scale.data"]])
+Cancer_cells_marker_genes
+
+Epithelial_cells_marker_genes <- Epithelial_cells_marker_genes %in% rownames(obj@assays$RNA@layers[["scale.data"]])
+Epithelial_cells_marker_genes
+
+# 绘制小提琴图，查看基因的表达分布
+VlnPlot(obj, features = c("CD14", "LYZ", "CD68"), group.by = "seurat_clusters")
+#5 #17
+VlnPlot(obj, features = c("EPCAM"), group.by = "seurat_clusters")
+#0 #1 #2 #3 #4 #10 #13 #15
+VlnPlot(obj, features = c("CAPS", "SNTN"), group.by = "seurat_clusters")
+#0 #1 #2 #3 #4？#13
+gc()
+
+#细胞注释
+# find markers for every cluster compared to all remaining cells, report only the positive
+# ones
+markers <- FindAllMarkers(obj, only.pos = TRUE)
+  markers %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1)
+
+gc()
+head(markers)
+
+# 定义已知的细胞类型标记基因
+# 定义标记基因
+marker_genes <- list(
+  Endothelial_cells = c("CLDN5", "VWF", "PECAM1"),
+  Epithelial_cells = c("CAPS", "SNTN"),
+  Alveolar_cells = c("CLDN18", "AQP4", "CAV1", "AGER", "SFTPC", "SFTPA1", "ABCA3"),
+  Fibroblasts = c("COL1A1", "COL1A2", "DCN"),
+  T_cells = c("CD2", "CD3D", "CD3E", "CD3G"),
+  B_cells = c("CD79A", "CD79B"),
+  Macrophages = c("CD14", "LYZ", "CD68"),
+  Neutrophils = c("CSF3R", "S100A8", "S100A9"),
+  Follicular_dendritic_cells = c("FDCSP"),
+  Mast_cells = c("GATA2", "TPSAB1", "TPSB2"),
+  Cancer_cells = c("EPCAM")  # 特别注明癌细胞标记基因
+)
+gc()
+
+# 获取所有得分列的名字
+score_columns <- grep("celltype_score", colnames(obj@meta.data), value = TRUE)
+
+# 为每个细胞分配得分最高的细胞类型
+obj$predicted_celltype <- apply(obj@meta.data[, score_columns], 1, function(x) {
+  # 根据得分，选择得分最高的标记基因集
+  celltype <- names(marker_genes)[which.max(x)]
+  return(celltype)
+})
+
+# 筛选EPCAM阳性且CAPS和SNTN阴性的细胞
+cancer_cells <- WhichCells(obj, expression = "EPCAM > 0 & CAPS == 0 & SNTN == 0 ")
+
+# 将这些细胞注释为"cancer cells"
+obj$predicted_celltype[cancer_cells] <- "Cancer cells"
+
+DimPlot(obj, reduction = "umap", group.by = "predicted_celltype", label = TRUE)
+
+# 绘制小提琴图，查看基因的表达分布
+VlnPlot(obj, features = c("CD14", "LYZ", "CD68"), group.by = "predicted_celltype")#巨噬细胞
+
+VlnPlot(obj, features = c("EPCAM"), group.by = "predicted_celltype")#癌细胞？
+
+VlnPlot(obj, features = c("CAPS", "SNTN"), group.by = "predicted_celltype")#表皮细胞
+
+VlnPlot(obj, features = c("CLDN5", "VWF", "PECAM1"), group.by = "predicted_celltype")#内皮细胞
+
+VlnPlot(obj, features = c("CLDN18", "AQP4"), group.by = "predicted_celltype")#肺泡细胞
+
+VlnPlot(obj, features = c("COL1A1", "COL1A2", "DCN"), group.by = "predicted_celltype")#成纤维细胞
+
+VlnPlot(obj, features = c("CD2", "CD3D", "CD3E", "CD3G"), group.by = "predicted_celltype")#T细胞
+
+VlnPlot(obj, features = c("CD79A", "CD79B"), group.by = "predicted_celltype")#B细胞
+
+VlnPlot(obj, features = c("CSF3R", "S100A8", "S100A9"), group.by = "predicted_celltype")#中性粒细胞
+
+VlnPlot(obj, features = c("FDCSP"), group.by = "predicted_celltype")#滤泡树突状细胞
+
+VlnPlot(obj, features = c("GATA2", "TPSAB1", "TPSB2"), group.by = "predicted_celltype")#肥大细胞
+
+
+gc()
+
+# 调整UMAP的n_neighbors和min_dist参数
+obj <- RunUMAP(obj, dims = 1:20, n.neighbors = 30, min.dist = 0.3)
+DimPlot(obj, reduction = "umap", group.by = "predicted_celltype", label = TRUE)
+FeaturePlot(obj, features = c("CLDN18", "EPCAM", "FDCSP"))
+
+# 使用PCA降维
+obj <- RunPCA(obj, features = VariableFeatures(obj))
+gc()
+DimPlot(obj, reduction = "pca", group.by = "predicted_celltype", label = TRUE)
+
+# 使用t-SNE降维
+obj <- RunTSNE(obj, dims = 1:20)
+my_colors <- brewer.pal(11, "Set3")
+DimPlot(obj, reduction = "tsne", group.by = "predicted_celltype", cols = my_colors)
+
+FeaturePlot(obj, features =c("EPCAM", "CAPS", "SNTN", "CLDN18", "AQP4", "FLOR1"), reduction = "tsne" )
+saveRDS(obj, file = "20samples_annotated.rds")
+
+gc()
+
+# 查看细胞注释信息
+table(obj$predicted_celltype)
+#Alveolar_cells           B_cells               Cancer_cells          Endothelial_cells 
+#4876                       1886                      16181                       1956 
+#Epithelial_cells         Fibroblasts Follicular_dendritic_cells                Macrophages 
+#1699                       4292                       4493                       5610 
+#Mast_cells                Neutrophils                T_cells 
+#1207                      12492                       2414 
+gc()
+
+# 将predicted_celltype列的值赋给idents
+Idents(obj) <- obj$predicted_celltype
+Idents(obj)#确认赋值成功
+
+# 保留指定的对象 (例如 'obj')，清除其他所有对象
+rm(list = setdiff(ls(), "obj"))
+
+# 筛选出 Macrophages 和 Cancer_cell 类型的细胞
+target_celltypes <- c("Macrophages", "Cancer_cells")
+filtered_cells <- WhichCells(obj, idents = target_celltypes)
+
+# 提取这些细胞的基因表达数据
+expression_data <- obj@assays[["RNA"]]@layers[["data"]][, filtered_cells]
+
+# 获取元数据，包括样本名（需要提取第二个_符号之前的信息）和细胞类型信息
+cell_metadata <- obj@meta.data[filtered_cells, c("orig.ident", "predicted_celltype")]
+
+# 提取样本名的第二个 _ 符号之前的信息（如 "GSM4453576_P1"）
+cell_metadata$sample_id <- sapply(strsplit(as.character(rownames(cell_metadata)), "_"), function(x) paste(x[1:2], collapse = "_"))
+table(cell_metadata$sample_id)
+
+# 将表达数据与元数据结合，元数据放在表达数据前面
+expression_data_with_metadata <- cbind(cell_metadata, t(expression_data))
+
+# 获取所有样本名
+sample_ids <- unique(cell_metadata$sample_id)
+
+# 对于每个样本，生成一个包含 Macrophages 和 Cancer_cell 数据的 CSV 文件
+for (sample_id in sample_ids) {
+  # 获取当前样本的数据
+  sample_data <- expression_data_with_metadata[cell_metadata$sample_id == sample_id, ]
+  
+  # 创建文件名，并保存为 CSV 文件
+  file_name <- paste0(sample_id, "_Macrophages_Cancer_cell.csv")
+  write.csv(sample_data, file = file_name, row.names = TRUE)
+}
